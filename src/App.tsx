@@ -3,6 +3,15 @@ import { Volume2, VolumeX, RotateCcw, Play, ChevronDown, ChevronUp } from 'lucid
 import Balloon from './components/Balloon';
 import { words } from './data/words';
 
+const shuffleWordList = () => {
+  const pool = [...words];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+};
+
 const levenshteinDistance = (str1: string, str2: string): number => {
   const track = Array(str2.length + 1)
     .fill(null)
@@ -59,6 +68,7 @@ function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const wordIndexRef = useRef(0);
   const balloonSpawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const wordPoolRef = useRef<string[]>(shuffleWordList());
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -150,29 +160,50 @@ function App() {
     };
   }, [checkAndPopBalloons]);
 
+  const getNextWord = useCallback(() => {
+    if (!wordPoolRef.current.length) {
+      wordPoolRef.current = shuffleWordList();
+      wordIndexRef.current = 0;
+    }
+
+    if (wordIndexRef.current >= wordPoolRef.current.length) {
+      wordPoolRef.current = shuffleWordList();
+      wordIndexRef.current = 0;
+    }
+
+    const nextWord = wordPoolRef.current[wordIndexRef.current];
+    wordIndexRef.current += 1;
+    return nextWord;
+  }, []);
+
   const addNewBalloons = useCallback(() => {
     setBalloons(prev => {
-      if (wordIndexRef.current >= words.length) {
-        return prev;
-      }
-
       const newBalloons: Array<{ id: number; word: string; left: number; delay: number }> = [];
       const spawnCount = Math.max(1, Math.round(intensity));
 
-      for (let i = 0; i < spawnCount && wordIndexRef.current < words.length; i++) {
+      for (let i = 0; i < spawnCount; i++) {
+        const nextWord = getNextWord();
+        if (!nextWord) {
+          break;
+        }
+
         const position = Math.random() * 85 + 5;
 
         newBalloons.push({
           id: balloonIdCounter.current++,
-          word: words[wordIndexRef.current++],
+          word: nextWord,
           left: position,
           delay: 0,
         });
       }
 
+      if (!newBalloons.length) {
+        return prev;
+      }
+
       return [...prev, ...newBalloons];
     });
-  }, [intensity]);
+  }, [getNextWord, intensity]);
 
   const scheduleBalloonSpawner = useCallback(() => {
     if (balloonSpawnIntervalRef.current) {
@@ -192,6 +223,7 @@ function App() {
     setBalloons([]);
     balloonIdCounter.current = 0;
     wordIndexRef.current = 0;
+    wordPoolRef.current = shuffleWordList();
 
     if (balloonSpawnIntervalRef.current) {
       clearInterval(balloonSpawnIntervalRef.current);
@@ -223,6 +255,8 @@ function App() {
     setBalloons([]);
     setScore(0);
     setIsListening(false);
+    wordPoolRef.current = shuffleWordList();
+    wordIndexRef.current = 0;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -272,7 +306,7 @@ function App() {
     setBalloons(prev => {
       const updated = prev.filter(b => b.id !== id);
 
-      if (updated.length < 3 && wordIndexRef.current < words.length) {
+      if (updated.length < 3) {
         addNewBalloons();
       }
 
