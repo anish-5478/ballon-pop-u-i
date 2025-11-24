@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 interface BalloonProps {
   id: number;
@@ -23,6 +23,21 @@ const colors = [
 function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
   const color = colors[id % colors.length];
   const animationDuration = 20 / speed;
+  const animationName = useMemo(
+    () => `float-${id}-${Math.random().toString(36).slice(2, 9)}`,
+    [id]
+  );
+  const driftOffsets = useMemo(() => {
+    const amplitude = 15 + Math.random() * 40;
+    let direction = Math.random() > 0.5 ? 1 : -1;
+    return Array.from({ length: 4 }, () => {
+      const offset = direction * (Math.random() * amplitude);
+      if (Math.random() > 0.3) {
+        direction *= -1;
+      }
+      return Number(offset.toFixed(2));
+    });
+  }, [id]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -32,13 +47,15 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
     return () => clearTimeout(timer);
   }, [id, animationDuration, delay, onComplete]);
 
+  const [offset25, offset50, offset75, offset100] = driftOffsets;
+
   return (
     <div
-      className="absolute animate-float"
+      className="absolute"
       style={{
         left: `${left}%`,
         bottom: '-10%',
-        animationDuration: `${animationDuration}s`,
+        animation: `${animationName} ${animationDuration}s linear forwards`,
         animationDelay: `${delay}s`,
       }}
     >
@@ -77,13 +94,25 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
       </div>
 
       <style>{`
-        @keyframes float {
+        @keyframes ${animationName} {
           0% {
             transform: translateY(0) translateX(0);
             bottom: -10%;
           }
+          25% {
+            transform: translateY(-5px) translateX(${offset25}px);
+            bottom: 20%;
+          }
+          50% {
+            transform: translateY(-10px) translateX(${offset50}px);
+            bottom: 50%;
+          }
+          75% {
+            transform: translateY(-15px) translateX(${offset75}px);
+            bottom: 80%;
+          }
           100% {
-            transform: translateY(-20px) translateX(${Math.random() > 0.5 ? '20px' : '-20px'});
+            transform: translateY(-20px) translateX(${offset100}px);
             bottom: 110%;
           }
         }
@@ -106,10 +135,6 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
             opacity: 0;
             transform: scale(0.5) translateY(-80px);
           }
-        }
-
-        .animate-float {
-          animation: float linear forwards;
         }
       `}</style>
     </div>
