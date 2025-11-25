@@ -91,7 +91,7 @@ function Balloon({ id, word, left, speed, delay, isPopping = false, onComplete }
         style={
           isPopping
             ? {
-                animation: 'pop-expand 0.35s cubic-bezier(0.5, 0, 0.3, 1) forwards',
+                animation: 'pop-expand 0.42s cubic-bezier(0.48, 0.04, 0.32, 1) forwards',
                 pointerEvents: 'none',
                 transformOrigin: 'center',
               }
@@ -185,21 +185,21 @@ function Balloon({ id, word, left, speed, delay, isPopping = false, onComplete }
             opacity: 1;
             transform: scale(1);
           }
-          55% {
-            opacity: 0.95;
-            transform: scale(1.32);
+          50% {
+            opacity: 0.97;
+            transform: scale(1.5);
           }
-          70% {
-            opacity: 0.92;
-            transform: scale(1.18);
+          60% {
+            opacity: 0.93;
+            transform: scale(1.1) translateY(-4px);
           }
-          85% {
+          72% {
             opacity: 0.9;
-            transform: scale(1.55);
+            transform: scale(1.65);
           }
-          92% {
+          82% {
             opacity: 0.85;
-            transform: scale(1.35);
+            transform: scale(1.15) translateY(3px);
           }
           100% {
             opacity: 0;

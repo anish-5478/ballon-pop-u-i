@@ -92,42 +92,36 @@ function App() {
   }, [isPlaying]);
 
   const triggerBalloonPop = useCallback((shouldPop: (balloon: BalloonState) => boolean) => {
-    let idsToPop: number[] = [];
-
-    setBalloons(prev => {
-      idsToPop = prev.filter(balloon => shouldPop(balloon) && !balloon.isPopping).map(balloon => balloon.id);
-
-      if (!idsToPop.length) {
-        return prev;
-      }
-
-      return prev.map(balloon =>
-        idsToPop.includes(balloon.id)
-          ? { ...balloon, isPopping: true }
-          : balloon
-      );
-    });
+    const idsToPop = balloons
+      .filter(balloon => shouldPop(balloon) && !balloon.isPopping)
+      .map(balloon => balloon.id);
 
     if (!idsToPop.length) {
       return 0;
     }
 
+    const idSet = new Set(idsToPop);
+
+    setBalloons(prev =>
+      prev.map(balloon =>
+        idSet.has(balloon.id) ? { ...balloon, isPopping: true } : balloon
+      )
+    );
+
+    setScore(s => s + idsToPop.length);
+
     setTimeout(() => {
-      setBalloons(prev => prev.filter(balloon => !idsToPop.includes(balloon.id)));
+      setBalloons(prev => prev.filter(balloon => !idSet.has(balloon.id)));
     }, POP_ANIMATION_DURATION_MS);
 
     return idsToPop.length;
-  }, []);
+  }, [balloons]);
 
   const checkAndPopBalloons = useCallback((spokenText: string) => {
     const spokenWords = spokenText.split(/\s+/).filter(w => w);
-    const poppedCount = triggerBalloonPop(balloon =>
+    triggerBalloonPop(balloon =>
       spokenWords.some(word => isSimilarWord(word, balloon.word))
     );
-
-    if (poppedCount > 0) {
-      setScore(s => s + poppedCount);
-    }
   }, [triggerBalloonPop]);
 
   useEffect(() => {
@@ -310,11 +304,7 @@ function App() {
     if (e.key === 'Enter' && typedWord.trim()) {
       e.preventDefault();
       const typed = typedWord.toLowerCase().trim();
-      const poppedCount = triggerBalloonPop(balloon => balloon.word === typed);
-
-      if (poppedCount > 0) {
-        setScore(s => s + poppedCount);
-      }
+      triggerBalloonPop(balloon => balloon.word === typed);
 
       setTypedWord('');
     }
