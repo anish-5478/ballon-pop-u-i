@@ -13,6 +13,47 @@ type BalloonState = {
 
 const POP_ANIMATION_DURATION_MS = 250;
 
+const SPEED_INTERVALS = [
+  { value: 0.5, interval: 11000 },
+  { value: 1, interval: 9000 },
+  { value: 1.5, interval: 8000 },
+  { value: 2, interval: 7000 },
+  { value: 2.5, interval: 6000 },
+  { value: 3, interval: 5000 },
+];
+
+const INTENSITY_SPAWNS = [
+  { value: 0.5, count: 1 },
+  { value: 1, count: 2 },
+  { value: 1.5, count: 3 },
+  { value: 2, count: 4 },
+  { value: 2.5, count: 5 },
+  { value: 3, count: 6 },
+];
+
+const interpolate = (value: number, table: Array<{ value: number; interval?: number; count?: number }>) => {
+  const clamped = Math.min(Math.max(value, table[0].value), table[table.length - 1].value);
+  for (let i = 0; i < table.length - 1; i += 1) {
+    const current = table[i];
+    const next = table[i + 1];
+    if (clamped >= current.value && clamped <= next.value) {
+      const ratio = (clamped - current.value) / (next.value - current.value || 1);
+      if ('interval' in current && 'interval' in next) {
+        return current.interval! + (next.interval! - current.interval!) * ratio;
+      }
+      if ('count' in current && 'count' in next) {
+        return current.count! + (next.count! - current.count!) * ratio;
+      }
+    }
+  }
+  return 'interval' in table[table.length - 1]
+    ? table[table.length - 1].interval!
+    : table[table.length - 1].count!;
+};
+
+const getSpawnInterval = (speed: number) => Math.round(interpolate(speed, SPEED_INTERVALS));
+const getSpawnCount = (intensity: number) => Math.round(interpolate(intensity, INTENSITY_SPAWNS));
+
 const shuffleWordList = () => {
   const pool = [...words];
   for (let i = pool.length - 1; i > 0; i--) {
@@ -20,6 +61,61 @@ const shuffleWordList = () => {
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   return pool;
+};
+
+const normalizeWord = (word: string): string =>
+  word
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
+const soundexMap: Record<string, string> = {
+  b: '1',
+  f: '1',
+  p: '1',
+  v: '1',
+  c: '2',
+  g: '2',
+  j: '2',
+  k: '2',
+  q: '2',
+  s: '2',
+  x: '2',
+  z: '2',
+  d: '3',
+  t: '3',
+  l: '4',
+  m: '5',
+  n: '5',
+  r: '6',
+};
+
+const getSoundex = (word: string): string => {
+  const cleaned = normalizeWord(word);
+  if (!cleaned) {
+    return '';
+  }
+
+  let result = cleaned[0];
+  let lastDigit = soundexMap[result] ?? '';
+
+  for (let i = 1; i < cleaned.length; i += 1) {
+    const digit = soundexMap[cleaned[i]] ?? '';
+    if (digit !== '' && digit !== lastDigit) {
+      result += digit;
+    }
+    lastDigit = digit;
+    if (result.length === 4) {
+      break;
+    }
+  }
+
+  while (result.length < 4) {
+    result += '0';
+  }
+
+  return result;
 };
 
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -50,16 +146,31 @@ const levenshteinDistance = (str1: string, str2: string): number => {
 };
 
 const isSimilarWord = (spoken: string, target: string): boolean => {
-  const s = spoken.toLowerCase();
-  const t = target.toLowerCase();
+  const s = normalizeWord(spoken);
+  const t = normalizeWord(target);
 
-  if (s === t) return true;
+  if (!s || !t) {
+    return false;
+  }
+
+  if (s === t) {
+    return true;
+  }
+
+  if ((t.includes(s) || s.includes(t)) && Math.abs(s.length - t.length) <= 2) {
+    return true;
+  }
+
+  if (getSoundex(s) === getSoundex(t)) {
+    return true;
+  }
 
   const distance = levenshteinDistance(s, t);
   const maxLength = Math.max(s.length, t.length);
   const similarity = 1 - distance / maxLength;
 
-  return similarity >= 0.75;
+  const threshold = maxLength <= 4 ? 0.6 : 0.72;
+  return similarity >= threshold;
 };
 
 function App() {
@@ -123,7 +234,10 @@ function App() {
   }, []);
 
   const checkAndPopBalloons = useCallback((spokenText: string) => {
-    const spokenWords = spokenText.split(/\s+/).filter(w => w);
+    const spokenWords = spokenText
+      .split(/[\s,.;!?]+/)
+      .map(word => word.trim())
+      .filter(Boolean);
     triggerBalloonPop(balloon =>
       spokenWords.some(word => isSimilarWord(word, balloon.word))
     );
@@ -144,7 +258,7 @@ function App() {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
 
     if ((recognition as any).processInput) {
       (recognition as any).processInput.audioWorkletOptions = {
@@ -154,17 +268,25 @@ function App() {
 
     recognition.onresult = (event: any) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcriptSegment = event.results[i][0].transcript?.toLowerCase().trim();
-        if (!transcriptSegment || transcriptSegment === lastTranscriptRef.current) {
-          continue;
-        }
+        const result = event.results[i];
+        for (let j = 0; j < result.length; j++) {
+          const transcriptSegment = result[j].transcript?.toLowerCase().trim();
+          if (!transcriptSegment) {
+            continue;
+          }
 
-        lastTranscriptRef.current = transcriptSegment;
-        setRecognizedWord(transcriptSegment);
-        checkAndPopBalloons(transcriptSegment);
+          const normalizedSegment = normalizeWord(transcriptSegment);
+          if (!normalizedSegment || normalizedSegment === lastTranscriptRef.current) {
+            continue;
+          }
 
-        if (event.results[i].isFinal) {
-          lastTranscriptRef.current = '';
+          lastTranscriptRef.current = normalizedSegment;
+          setRecognizedWord(transcriptSegment);
+          checkAndPopBalloons(transcriptSegment);
+
+          if (result.isFinal) {
+            lastTranscriptRef.current = '';
+          }
         }
       }
     };
@@ -211,23 +333,32 @@ function App() {
 
   const addNewBalloons = useCallback(() => {
     setBalloons(prev => {
-      const nextWord = getNextWord();
-      if (!nextWord) {
+      const spawnCount = Math.max(1, getSpawnCount(intensity));
+      const newBalloons: BalloonState[] = [];
+
+      for (let i = 0; i < spawnCount; i += 1) {
+        const nextWord = getNextWord();
+        if (!nextWord) {
+          break;
+        }
+
+        const position = Math.random() * 85 + 5;
+
+        newBalloons.push({
+          id: balloonIdCounter.current++,
+          word: nextWord,
+          left: position,
+          delay: 0,
+        });
+      }
+
+      if (!newBalloons.length) {
         return prev;
       }
 
-      const position = Math.random() * 85 + 5;
-
-      const newBalloon = {
-        id: balloonIdCounter.current++,
-        word: nextWord,
-        left: position,
-        delay: 0,
-      };
-
-      return [...prev, newBalloon];
+      return [...prev, ...newBalloons];
     });
-  }, [getNextWord]);
+  }, [getNextWord, intensity]);
 
   const scheduleBalloonSpawner = useCallback(() => {
     if (balloonSpawnIntervalRef.current) {
@@ -236,8 +367,8 @@ function App() {
 
     balloonSpawnIntervalRef.current = setInterval(() => {
       addNewBalloons();
-    }, 11000);
-  }, [addNewBalloons]);
+    }, getSpawnInterval(speed));
+  }, [addNewBalloons, speed]);
 
   const startGame = () => {
     setIsPlaying(true);
@@ -462,7 +593,7 @@ function App() {
                   <input
                     type="range"
                     min="0.5"
-                    max="2"
+                    max="3"
                     step="0.1"
                     value={intensity}
                     onChange={(e) => setIntensity(parseFloat(e.target.value))}
