@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, CSSProperties } from 'react';
 
 interface BalloonProps {
   id: number;
@@ -6,6 +6,7 @@ interface BalloonProps {
   left: number;
   speed: number;
   delay: number;
+  isPopping?: boolean;
   onComplete: (id: number) => void;
 }
 
@@ -20,8 +21,20 @@ const colors = [
   'from-lime-400 to-emerald-500',
 ];
 
-function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
+const colorHex = [
+  '#34d399',
+  '#22d3ee',
+  '#a78bfa',
+  '#f59e0b',
+  '#fb7185',
+  '#f472b6',
+  '#d946ef',
+  '#84cc16',
+];
+
+function Balloon({ id, word, left, speed, delay, isPopping = false, onComplete }: BalloonProps) {
   const color = colors[id % colors.length];
+  const popColor = colorHex[id % colorHex.length];
   const animationDuration = 20 / speed;
   const animationName = useMemo(
     () => `float-${id}-${Math.random().toString(36).slice(2, 9)}`,
@@ -36,6 +49,19 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
         direction *= -1;
       }
       return Number(offset.toFixed(2));
+    });
+  }, [id]);
+
+  const particleStyles = useMemo(() => {
+    const angles = [0, 60, 120, 180, 240, 300];
+    return angles.map(angle => {
+      const distance = 40 + Math.random() * 25;
+      const rad = (angle * Math.PI) / 180;
+      return {
+        '--particle-x': `${Math.cos(rad) * distance}px`,
+        '--particle-y': `${Math.sin(rad) * distance}px`,
+        animationDelay: `${(Math.random() * 0.04).toFixed(2)}s`,
+      } as CSSProperties;
     });
   }, [id]);
 
@@ -57,13 +83,25 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
         bottom: '-10%',
         animation: `${animationName} ${animationDuration}s linear forwards`,
         animationDelay: `${delay}s`,
+        animationPlayState: isPopping ? 'paused' : 'running',
       }}
     >
-      <div className="relative group">
+      <div
+        className="relative group"
+        style={
+          isPopping
+            ? {
+                animation: 'pop-expand 0.35s cubic-bezier(0.5, 0, 0.3, 1) forwards',
+                pointerEvents: 'none',
+                transformOrigin: 'center',
+              }
+            : undefined
+        }
+      >
         <div
           className={`w-24 h-32 bg-gradient-to-br ${color} rounded-full shadow-2xl relative transform transition-transform group-hover:scale-110 overflow-hidden`}
           style={{
-            animation: 'sway 3s ease-in-out infinite',
+            animation: isPopping ? 'none' : 'sway 3s ease-in-out infinite',
             boxShadow: '0 20px 40px rgba(0,0,0,0.3), inset -2px -2px 8px rgba(255,255,255,0.2)',
           }}
         >
@@ -91,6 +129,22 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
         <div className="absolute top-6 left-5 w-7 h-7 bg-white/50 rounded-full blur-md" style={{
           boxShadow: 'inset 0 -2px 4px rgba(0,0,0,0.1)',
         }} />
+
+        {isPopping && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {particleStyles.map((style, index) => (
+              <span
+                key={index}
+                className="absolute block w-2 h-2 rounded-full"
+                style={{
+                  backgroundColor: popColor,
+                  animation: 'particle-burst 0.35s 0.18s ease-out forwards',
+                  ...style,
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -126,14 +180,41 @@ function Balloon({ id, word, left, speed, delay, onComplete }: BalloonProps) {
           }
         }
 
-        @keyframes burst {
+        @keyframes pop-expand {
           0% {
             opacity: 1;
-            transform: scale(1) translateY(0);
+            transform: scale(1);
+          }
+          55% {
+            opacity: 0.95;
+            transform: scale(1.32);
+          }
+          70% {
+            opacity: 0.92;
+            transform: scale(1.18);
+          }
+          85% {
+            opacity: 0.9;
+            transform: scale(1.55);
+          }
+          92% {
+            opacity: 0.85;
+            transform: scale(1.35);
           }
           100% {
             opacity: 0;
-            transform: scale(0.5) translateY(-80px);
+            transform: scale(0.2);
+          }
+        }
+
+        @keyframes particle-burst {
+          0% {
+            opacity: 1;
+            transform: translate(0, 0) scale(0.6);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(var(--particle-x, 0), var(--particle-y, -30px)) scale(0.2);
           }
         }
       `}</style>

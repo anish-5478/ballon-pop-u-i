@@ -3,6 +3,16 @@ import { Volume2, VolumeX, RotateCcw, Play, ChevronDown, ChevronUp } from 'lucid
 import Balloon from './components/Balloon';
 import { words } from './data/words';
 
+type BalloonState = {
+  id: number;
+  word: string;
+  left: number;
+  delay: number;
+  isPopping?: boolean;
+};
+
+const POP_ANIMATION_DURATION_MS = 250;
+
 const shuffleWordList = () => {
   const pool = [...words];
   for (let i = pool.length - 1; i > 0; i--) {
@@ -53,9 +63,9 @@ const isSimilarWord = (spoken: string, target: string): boolean => {
 };
 
 function App() {
-  const [balloons, setBalloons] = useState<Array<{ id: number; word: string; left: number; delay: number }>>([]);
+  const [balloons, setBalloons] = useState<BalloonState[]>([]);
   const [speed, setSpeed] = useState(1);
-  const [intensity, setIntensity] = useState(1);
+  const [intensity, setIntensity] = useState(0.7);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -69,6 +79,7 @@ function App() {
   const wordIndexRef = useRef(0);
   const balloonSpawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wordPoolRef = useRef<string[]>(shuffleWordList());
+  const lastTranscriptRef = useRef('');
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -80,22 +91,44 @@ function App() {
     }
   }, [isPlaying]);
 
-  const checkAndPopBalloons = useCallback((spokenText: string) => {
-    const spokenWords = spokenText.split(/\s+/).filter(w => w);
+  const triggerBalloonPop = useCallback((shouldPop: (balloon: BalloonState) => boolean) => {
+    let idsToPop: number[] = [];
 
     setBalloons(prev => {
-      const updated = prev.filter(balloon => {
-        return !spokenWords.some(word => isSimilarWord(word, balloon.word));
-      });
+      idsToPop = prev.filter(balloon => shouldPop(balloon) && !balloon.isPopping).map(balloon => balloon.id);
 
-      const poppedCount = prev.length - updated.length;
-      if (poppedCount > 0) {
-        setScore(s => s + poppedCount);
+      if (!idsToPop.length) {
+        return prev;
       }
 
-      return updated;
+      return prev.map(balloon =>
+        idsToPop.includes(balloon.id)
+          ? { ...balloon, isPopping: true }
+          : balloon
+      );
     });
+
+    if (!idsToPop.length) {
+      return 0;
+    }
+
+    setTimeout(() => {
+      setBalloons(prev => prev.filter(balloon => !idsToPop.includes(balloon.id)));
+    }, POP_ANIMATION_DURATION_MS);
+
+    return idsToPop.length;
   }, []);
+
+  const checkAndPopBalloons = useCallback((spokenText: string) => {
+    const spokenWords = spokenText.split(/\s+/).filter(w => w);
+    const poppedCount = triggerBalloonPop(balloon =>
+      spokenWords.some(word => isSimilarWord(word, balloon.word))
+    );
+
+    if (poppedCount > 0) {
+      setScore(s => s + poppedCount);
+    }
+  }, [triggerBalloonPop]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -121,18 +154,19 @@ function App() {
     }
 
     recognition.onresult = (event: any) => {
-      let transcript = '';
-
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcriptSegment = event.results[i][0].transcript;
-        transcript += transcriptSegment;
-      }
+        const transcriptSegment = event.results[i][0].transcript?.toLowerCase().trim();
+        if (!transcriptSegment || transcriptSegment === lastTranscriptRef.current) {
+          continue;
+        }
 
-      transcript = transcript.toLowerCase().trim();
+        lastTranscriptRef.current = transcriptSegment;
+        setRecognizedWord(transcriptSegment);
+        checkAndPopBalloons(transcriptSegment);
 
-      if (transcript.length > 0) {
-        setRecognizedWord(transcript);
-        checkAndPopBalloons(transcript);
+        if (event.results[i].isFinal) {
+          lastTranscriptRef.current = '';
+        }
       }
     };
 
@@ -287,16 +321,11 @@ function App() {
     if (e.key === 'Enter' && typedWord.trim()) {
       e.preventDefault();
       const typed = typedWord.toLowerCase().trim();
+      const poppedCount = triggerBalloonPop(balloon => balloon.word === typed);
 
-      setBalloons(prev => {
-        const updated = prev.filter(balloon => balloon.word !== typed);
-
-        if (prev.length > updated.length) {
-          setScore(s => s + 1);
-        }
-
-        return updated;
-      });
+      if (poppedCount > 0) {
+        setScore(s => s + poppedCount);
+      }
 
       setTypedWord('');
     }
@@ -330,6 +359,7 @@ function App() {
             left={balloon.left}
             speed={speed}
             delay={balloon.delay}
+            isPopping={balloon.isPopping}
             onComplete={handleBalloonComplete}
           />
         ))}
