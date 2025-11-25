@@ -212,44 +212,33 @@ function App() {
 
   const addNewBalloons = useCallback(() => {
     setBalloons(prev => {
-      const newBalloons: Array<{ id: number; word: string; left: number; delay: number }> = [];
-      const spawnCount = Math.max(1, Math.round(intensity));
-
-      for (let i = 0; i < spawnCount; i++) {
-        const nextWord = getNextWord();
-        if (!nextWord) {
-          break;
-        }
-
-        const position = Math.random() * 85 + 5;
-
-        newBalloons.push({
-          id: balloonIdCounter.current++,
-          word: nextWord,
-          left: position,
-          delay: 0,
-        });
-      }
-
-      if (!newBalloons.length) {
+      const nextWord = getNextWord();
+      if (!nextWord) {
         return prev;
       }
 
-      return [...prev, ...newBalloons];
+      const position = Math.random() * 85 + 5;
+
+      const newBalloon = {
+        id: balloonIdCounter.current++,
+        word: nextWord,
+        left: position,
+        delay: 0,
+      };
+
+      return [...prev, newBalloon];
     });
-  }, [getNextWord, intensity]);
+  }, [getNextWord]);
 
   const scheduleBalloonSpawner = useCallback(() => {
     if (balloonSpawnIntervalRef.current) {
       clearInterval(balloonSpawnIntervalRef.current);
     }
 
-    const intervalDuration = Math.max(1500, 5000 / intensity);
-
     balloonSpawnIntervalRef.current = setInterval(() => {
       addNewBalloons();
-    }, intervalDuration);
-  }, [addNewBalloons, intensity]);
+    }, 11000);
+  }, [addNewBalloons]);
 
   const startGame = () => {
     setIsPlaying(true);
