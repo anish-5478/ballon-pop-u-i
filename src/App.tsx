@@ -80,6 +80,7 @@ function App() {
   const balloonSpawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wordPoolRef = useRef<string[]>(shuffleWordList());
   const lastTranscriptRef = useRef('');
+  const balloonsRef = useRef<BalloonState[]>([]);
 
   useEffect(() => {
     isListeningRef.current = isListening;
@@ -91,28 +92,27 @@ function App() {
     }
   }, [isPlaying]);
 
+  useEffect(() => {
+    balloonsRef.current = balloons;
+  }, [balloons]);
+
   const triggerBalloonPop = useCallback((shouldPop: (balloon: BalloonState) => boolean) => {
-    let idsToPop: number[] = [];
-
-    setBalloons(prev => {
-      idsToPop = prev.filter(balloon => shouldPop(balloon) && !balloon.isPopping).map(balloon => balloon.id);
-
-      if (!idsToPop.length) {
-        return prev;
-      }
-
-      const idSet = new Set(idsToPop);
-
-      return prev.map(balloon =>
-        idSet.has(balloon.id) ? { ...balloon, isPopping: true } : balloon
-      );
-    });
+    const idsToPop = balloonsRef.current
+      .filter(balloon => shouldPop(balloon) && !balloon.isPopping)
+      .map(balloon => balloon.id);
 
     if (!idsToPop.length) {
       return 0;
     }
 
     const idSet = new Set(idsToPop);
+
+    setBalloons(prev =>
+      prev.map(balloon =>
+        idSet.has(balloon.id) ? { ...balloon, isPopping: true } : balloon
+      )
+    );
+
     setScore(s => s + idsToPop.length);
 
     setTimeout(() => {
