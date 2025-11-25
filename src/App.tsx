@@ -92,22 +92,27 @@ function App() {
   }, [isPlaying]);
 
   const triggerBalloonPop = useCallback((shouldPop: (balloon: BalloonState) => boolean) => {
-    const idsToPop = balloons
-      .filter(balloon => shouldPop(balloon) && !balloon.isPopping)
-      .map(balloon => balloon.id);
+    let idsToPop: number[] = [];
+
+    setBalloons(prev => {
+      idsToPop = prev.filter(balloon => shouldPop(balloon) && !balloon.isPopping).map(balloon => balloon.id);
+
+      if (!idsToPop.length) {
+        return prev;
+      }
+
+      const idSet = new Set(idsToPop);
+
+      return prev.map(balloon =>
+        idSet.has(balloon.id) ? { ...balloon, isPopping: true } : balloon
+      );
+    });
 
     if (!idsToPop.length) {
       return 0;
     }
 
     const idSet = new Set(idsToPop);
-
-    setBalloons(prev =>
-      prev.map(balloon =>
-        idSet.has(balloon.id) ? { ...balloon, isPopping: true } : balloon
-      )
-    );
-
     setScore(s => s + idsToPop.length);
 
     setTimeout(() => {
@@ -115,7 +120,7 @@ function App() {
     }, POP_ANIMATION_DURATION_MS);
 
     return idsToPop.length;
-  }, [balloons]);
+  }, []);
 
   const checkAndPopBalloons = useCallback((spokenText: string) => {
     const spokenWords = spokenText.split(/\s+/).filter(w => w);
